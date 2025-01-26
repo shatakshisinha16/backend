@@ -7,24 +7,20 @@ const { ObjectId } = require('mongodb');
 require('dotenv').config();
 
 const app = express();
+
 app.use(cors());
 
-// MongoDB connection
 const mongoURI = process.env.MONGO_URI || "mongodb+srv://pritul:defcon2020@cluster0.9jwhd.mongodb.net/?retryWrites=true&w=majority&appName=Cluster0";
 
-mongoose
-  .connect(mongoURI, {
-    useNewUrlParser: true,
-    useUnifiedTopology: true,
-  })
-  .then(() => {
-    console.log("MongoDB connected");
-  })
-  .catch((err) => {
-    console.error("MongoDB connection error:", err);
-  });
+mongoose.connect(mongoURI, {
+  useNewUrlParser: true,
+  useUnifiedTopology: true,
+}).then(() => {
+  console.log("MongoDB connected");
+}).catch(err => {
+  console.error("MongoDB connection error:", err);
+});
 
-// Define the schema and model
 const questionSchema = new mongoose.Schema({
   title: String,
   type: String,
@@ -37,20 +33,19 @@ const questionSchema = new mongoose.Schema({
 
 const Question = mongoose.model('Question', questionSchema);
 
-// Function to load data from JSON file
 async function loadDataFromJson() {
-  const filePath = path.resolve(__dirname, 'speakx_questions.json');
-
+  const filePath = path.join(__dirname, 'speakx_questions.json');
+  
   fs.readFile(filePath, 'utf8', async (err, data) => {
     if (err) {
       console.error("Error reading JSON file:", err);
       return;
     }
-
+    
     try {
-      const questions = JSON.parse(data);
+      const questions = JSON.parse(data);  // Parse the JSON data
 
-      const formattedQuestions = questions.map((question) => {
+      const formattedQuestions = questions.map(question => {
         if (question._id) {
           question._id = new ObjectId(question._id.$oid);
         }
@@ -60,20 +55,16 @@ async function loadDataFromJson() {
         return question;
       });
 
-      await Question.insertMany(formattedQuestions, { ordered: false }).catch(err => {
-        console.error("Error inserting data (e.g., duplicate keys):", err.message);
-      });
-
+      await Question.insertMany(formattedQuestions);
       console.log(`Inserted ${formattedQuestions.length} questions into MongoDB.`);
     } catch (e) {
-      console.error("Error parsing or inserting data:", e);
+      console.error("Error inserting data into MongoDB:", e);
     }
   });
 }
 
 loadDataFromJson();
 
-// Endpoint: Search questions by title
 app.get('/search', async (req, res) => {
   const { title, page = 1, per_page = 10 } = req.query;
 
@@ -82,11 +73,10 @@ app.get('/search', async (req, res) => {
   }
 
   try {
-    const skip = (Math.max(1, parseInt(page)) - 1) * Math.min(100, parseInt(per_page));
+    const skip = (page - 1) * per_page;
     const questions = await Question.find({ title: { $regex: title, $options: 'i' } })
-      .lean()
-      .skip(skip)
-      .limit(parseInt(per_page));
+                                    .skip(skip)
+                                    .limit(parseInt(per_page));
 
     if (questions.length > 0) {
       return res.status(200).json(questions);
@@ -98,13 +88,12 @@ app.get('/search', async (req, res) => {
   }
 });
 
-// Endpoint: Get paginated questions
 app.get('/questions', async (req, res) => {
   const { page = 1, per_page = 10 } = req.query;
 
   try {
-    const skip = (Math.max(1, parseInt(page)) - 1) * Math.min(100, parseInt(per_page));
-    const questions = await Question.find().lean().skip(skip).limit(parseInt(per_page));
+    const skip = (page - 1) * per_page;
+    const questions = await Question.find().skip(skip).limit(parseInt(per_page));
 
     if (questions.length > 0) {
       return res.status(200).json(questions);
@@ -116,14 +105,6 @@ app.get('/questions', async (req, res) => {
   }
 });
 
-// Graceful shutdown
-process.on('SIGINT', async () => {
-  await mongoose.disconnect();
-  console.log("MongoDB disconnected");
-  process.exit(0);
-});
-
-// Start the server
 const PORT = process.env.PORT || 5000;
 app.listen(PORT, () => {
   console.log(`Server running on port ${PORT}`);
